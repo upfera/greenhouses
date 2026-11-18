@@ -1,13 +1,11 @@
 # Greenhouses
 
-Greenhouses is a vendor-neutral platform for supervised automations. Automations execute in
-isolation. A trusted supervisor validates their results and controls external side effects. The
-step inside the isolation is an agent or deterministic code that produces a structured result,
-and the supervisor checks that result against the current state before any external effect. The
-software factory is planned as the first catalogue of such automations, and other automations
-such as digests, monitors or reports are expected to reuse the same runtime. This repository
-currently contains only the package skeleton, the installable `greenhouses` command and the
-`compute_revision` domain function.
+Greenhouses is a vendor-neutral platform for supervised automations: execution happens in
+isolation, and a trusted supervisor validates structured results against the current state and
+controls external side effects. The software factory is planned as the first automation catalogue,
+with digests, monitors, reports and other automations sharing the same runtime. This repository
+currently provides only the package skeleton, the installable `greenhouses` command and the
+`compute_revision` domain function; the runtime is not implemented yet.
 
 ## Prerequisites
 
