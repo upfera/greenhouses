@@ -30,18 +30,25 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 # Parsed with parameter expansion only: the tests run this script on a minimal PATH.
-# The suffix is stripped, not judged: uv has never published a pre-release, and a newer
-# build carrying one (0.14.0-dev.1) must not be refused.
+# The floor is the stable 0.13.0. Build metadata is ignored, as semver says, and a
+# pre-release is judged only when its base is the floor itself: 0.13.0rc1 is below 0.13.0
+# and is refused, while 0.14.0-dev.1 is above it and is accepted.
 uv_version=$(uv --version)
 uv_version=${uv_version#* }
 uv_version=${uv_version%% *}
-uv_major=${uv_version%%.*}
-uv_rest=${uv_version#*.}
+uv_release=${uv_version%%+*}
+uv_base=${uv_release%%[!0-9.]*}
+uv_suffix=${uv_release#"$uv_base"}
+uv_major=${uv_base%%.*}
+uv_rest=${uv_base#*.}
 uv_minor=${uv_rest%%.*}
+uv_patch=${uv_rest#*.}
+uv_patch=${uv_patch%%.*}
 uv_major=${uv_major%%[!0-9]*}
 uv_minor=${uv_minor%%[!0-9]*}
+uv_patch=${uv_patch%%[!0-9]*}
 
-if [ -z "$uv_major" ] || [ -z "$uv_minor" ]; then
+if [ -z "$uv_major" ] || [ -z "$uv_minor" ] || [ -z "$uv_patch" ]; then
     echo "error: could not read the uv version from 'uv --version'." >&2
     exit 1
 fi
@@ -49,6 +56,12 @@ fi
 if [ "$uv_major" -eq 0 ] && [ "$uv_minor" -lt 13 ]; then
     echo "error: uv $uv_version is too old; 0.13.0 or newer is required." >&2
     echo "Below 0.13.0, '--no-build' also blocks building this project from source." >&2
+    echo "Update uv from https://docs.astral.sh/uv/ and run this script again." >&2
+    exit 1
+fi
+
+if [ -n "$uv_suffix" ] && [ "$uv_major" -eq 0 ] && [ "$uv_minor" -eq 13 ] && [ "$uv_patch" -eq 0 ]; then
+    echo "error: uv $uv_version is a pre-release of 0.13.0; 0.13.0 or newer is required." >&2
     echo "Update uv from https://docs.astral.sh/uv/ and run this script again." >&2
     exit 1
 fi

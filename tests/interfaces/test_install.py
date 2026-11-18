@@ -120,16 +120,48 @@ def test_top_of_the_old_band_is_rejected(tmp_path: Path) -> None:
     assert "tool install" not in log.read_text(encoding="utf-8")
 
 
-def test_pre_release_uv_version_does_not_abort_the_check(tmp_path: Path) -> None:
-    # Robustness, not policy: uv has never published a pre-release, so the suffix is
-    # stripped rather than judged. Judging it would also refuse a newer build that
-    # carries one (0.14.0-dev.1), which works.
+def test_pre_release_of_the_floor_is_rejected(tmp_path: Path) -> None:
+    # 0.13.0rc1 is a pre-release of the floor, and semver puts it below 0.13.0: the
+    # declared floor is the stable release, so this must not pass as 0.13.0.
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     tool_bin = tmp_path / "tools"
     tool_bin.mkdir()
     log = tmp_path / "uv.log"
     _fake_uv(bin_dir, tool_bin, log, version="0.13.0rc1")
+    _fake_greenhouses(tool_bin)
+
+    result = _run([], [bin_dir, tool_bin])
+
+    assert result.returncode == 1
+    assert "0.13.0" in result.stderr
+    assert "tool install" not in log.read_text(encoding="utf-8")
+
+
+def test_a_newer_version_with_a_suffix_is_accepted(tmp_path: Path) -> None:
+    # A pre-release is below its own release, not below earlier ones: 0.14.0-dev.1 is
+    # above 0.13.0, so a newer development build must not be refused.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    log = tmp_path / "uv.log"
+    _fake_uv(bin_dir, tool_bin, log, version="0.14.0-dev.1")
+    _fake_greenhouses(tool_bin)
+
+    result = _run([], [bin_dir, tool_bin])
+
+    assert result.returncode == 0
+
+
+def test_build_metadata_on_the_floor_is_accepted(tmp_path: Path) -> None:
+    # Build metadata does not order a version: 0.13.0+build5 is 0.13.0.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    log = tmp_path / "uv.log"
+    _fake_uv(bin_dir, tool_bin, log, version="0.13.0+build5")
     _fake_greenhouses(tool_bin)
 
     result = _run([], [bin_dir, tool_bin])
