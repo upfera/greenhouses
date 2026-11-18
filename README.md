@@ -10,7 +10,7 @@ runtime. This repository currently contains only the package skeleton, the insta
 
 ## Prerequisites
 
-- `uv` on `PATH`.
+- `uv` 0.13.0 or newer on `PATH`.
 - The uv tool binary directory on `PATH`. Print it with:
 
   ```sh
