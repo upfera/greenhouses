@@ -48,12 +48,15 @@ if [ -z "$uv_major" ] || [ -z "$uv_minor" ]; then
 fi
 
 case "$uv_release" in
-*[!0-9.]*)
+*[!0-9.]*) uv_stable=false ;;
+*) uv_stable=true ;;
+esac
+
+if [ "$uv_stable" = false ]; then
     echo "error: uv $uv_version is not a stable release; 0.13.0 or newer is required." >&2
     echo "Update uv from https://docs.astral.sh/uv/ and run this script again." >&2
     exit 1
-    ;;
-esac
+fi
 
 if [ "$uv_major" -eq 0 ] && [ "$uv_minor" -lt 13 ]; then
     echo "error: uv $uv_version is too old; 0.13.0 or newer is required." >&2
