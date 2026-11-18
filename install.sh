@@ -36,12 +36,8 @@ uv_version=${uv_version%% *}
 uv_major=${uv_version%%.*}
 uv_rest=${uv_version#*.}
 uv_minor=${uv_rest%%.*}
-case "$uv_major" in
-    *[!0-9]*) uv_major=${uv_major%%[!0-9]*} ;;
-esac
-case "$uv_minor" in
-    *[!0-9]*) uv_minor=${uv_minor%%[!0-9]*} ;;
-esac
+uv_major=${uv_major%%[!0-9]*}
+uv_minor=${uv_minor%%[!0-9]*}
 
 if [ -z "$uv_major" ] || [ -z "$uv_minor" ]; then
     echo "error: could not read the uv version from 'uv --version'." >&2
