@@ -23,12 +23,12 @@ organization's [CONTRIBUTING.md](https://github.com/upfera/.github/blob/main/CON
 
 ## Project commands
 
-- Build: `uv sync --locked --group test`
-- Test: `uv run --locked --group test pytest`
-- Lint/format: `uv run --locked --group test ruff check .` and `uv run --locked --group test ruff format --check .`
-- Types: `uv run --locked --group test mypy src`
+- Build: `uv sync --locked --group test --no-build`
+- Test: `uv run --locked --group test --no-build pytest`
+- Lint/format: `uv run --locked --group test --no-build ruff check .` and `uv run --locked --group test --no-build ruff format --check .`
+- Types: `uv run --locked --group test --no-build mypy src`
 
-Tests run only via `uv run --locked --group test pytest`; running `pytest` outside `uv run` is
+Tests run only via `uv run --locked --group test --no-build pytest`; running `pytest` outside `uv run` is
 not supported.
 
 ## Architecture

@@ -21,3 +21,8 @@ build/
 *.sqlite3
 coverage.xml
 .coverage
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
