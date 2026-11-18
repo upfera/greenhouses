@@ -67,4 +67,5 @@ case ":${PATH-}:" in
 esac
 
 uv tool install --editable --force --no-build .
-greenhouses --version
+# By path, not by name: an older `greenhouses` earlier on PATH is not the one to verify.
+"$tool_bin_dir/greenhouses" --version
