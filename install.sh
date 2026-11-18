@@ -30,6 +30,8 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 
 # Parsed with parameter expansion only: the tests run this script on a minimal PATH.
+# The suffix is stripped, not judged: uv has never published a pre-release, and a newer
+# build carrying one (0.14.0-dev.1) must not be refused.
 uv_version=$(uv --version)
 uv_version=${uv_version#* }
 uv_version=${uv_version%% *}
