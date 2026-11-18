@@ -38,14 +38,14 @@ greenhouses --help
 ## Development
 
 ```sh
-uv sync --locked --group test
-uv run --locked --group test ruff check .
-uv run --locked --group test ruff format --check .
-uv run --locked --group test mypy src
-uv run --locked --group test pytest --cov --cov-report=xml
+uv sync --locked --group test --no-build
+uv run --locked --group test --no-build ruff check .
+uv run --locked --group test --no-build ruff format --check .
+uv run --locked --group test --no-build mypy src
+uv run --locked --group test --no-build pytest --cov --cov-report=xml
 ```
 
-Tests run only via `uv run --locked --group test pytest`. Running `pytest` outside `uv run`
+Tests run only via `uv run --locked --group test --no-build pytest`. Running `pytest` outside `uv run`
 is not supported.
 
 See [`AGENTS.md`](AGENTS.md) for the engineering and architecture rules, and

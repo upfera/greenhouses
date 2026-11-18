@@ -103,5 +103,5 @@ def test_successful_install(tmp_path: Path) -> None:
     result = _run([], [bin_dir, tool_bin])
 
     assert result.returncode == 0
-    assert "tool install --editable --force ." in log.read_text(encoding="utf-8")
+    assert "tool install --editable --force --no-build ." in log.read_text(encoding="utf-8")
     assert "0.1.0" in result.stdout

@@ -42,5 +42,5 @@ case ":${PATH-}:" in
         ;;
 esac
 
-uv tool install --editable --force .
+uv tool install --editable --force --no-build .
 greenhouses --version
