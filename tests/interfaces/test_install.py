@@ -11,6 +11,8 @@ import stat
 import subprocess
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 INSTALL = REPO_ROOT / "install.sh"
 
@@ -61,6 +63,33 @@ def _run(args: list[str], path_dirs: list[Path]) -> subprocess.CompletedProcess[
     )
 
 
+def _installer(
+    tmp_path: Path,
+    version: str = "0.13.9",
+    install_status: int = 0,
+    *,
+    args: list[str] | None = None,
+    extra_path: tuple[Path, ...] = (),
+) -> tuple[subprocess.CompletedProcess[str], str, str]:
+    """Run the installer against a fake `uv` reporting `version`.
+
+    Returns the completed process, the `uv` log and the log of the fake `greenhouses`.
+    """
+    bin_dir, tool_bin = tmp_path / "bin", tmp_path / "tools"
+    bin_dir.mkdir()
+    tool_bin.mkdir()
+    uv_log = tmp_path / "uv.log"
+    cli_log = tmp_path / "greenhouses.log"
+    _fake_uv(bin_dir, tool_bin, uv_log, version=version, install_status=install_status)
+    _fake_greenhouses(tool_bin, log=cli_log)
+    result = _run(args or [], [*extra_path, bin_dir, tool_bin])
+
+    def read(path: Path) -> str:
+        return path.read_text(encoding="utf-8") if path.exists() else ""
+
+    return result, read(uv_log), read(cli_log)
+
+
 def test_help_exits_zero(tmp_path: Path) -> None:
     result = _run(["--help"], [])
     assert result.returncode == 0
@@ -85,110 +114,38 @@ def test_missing_uv_exits_one_without_running_uv(tmp_path: Path) -> None:
     assert not log.exists()
 
 
-def test_old_uv_exits_one_with_the_required_version(tmp_path: Path) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log, version="0.12.0")
-    _fake_greenhouses(tool_bin)
+@pytest.mark.parametrize(
+    ("version", "status"),
+    [
+        ("0.12.99", 1),  # below the floor
+        ("0.13.0rc1", 1),  # a release candidate is not a stable release
+        ("0.14.0-dev.1", 1),  # nor is a development build, however new it is
+        ("0.13.0", 0),  # the floor itself
+        ("0.13.9", 0),  # a stable release above the floor
+        ("0.13.0+build5", 0),  # build metadata is not a pre-release
+    ],
+)
+def test_the_uv_version_policy(tmp_path: Path, version: str, status: int) -> None:
+    result, uv_log, _ = _installer(tmp_path, version=version)
 
-    result = _run([], [bin_dir, tool_bin])
-
-    assert result.returncode == 1
-    assert "0.13.0" in result.stderr
-    # Nothing beyond the version check ran, `uv tool dir --bin` included.
-    assert log.read_text(encoding="utf-8").strip() == "--version"
-
-
-def test_top_of_the_old_band_is_rejected(tmp_path: Path) -> None:
-    # 0.12.99, not 0.12.0: the guard compares major and minor only, so the highest
-    # release below the boundary is the one that would expose an off-by-one.
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log, version="0.12.99")
-    _fake_greenhouses(tool_bin)
-
-    result = _run([], [bin_dir, tool_bin])
-
-    assert result.returncode == 1
-    assert "0.13.0" in result.stderr
-    assert "tool install" not in log.read_text(encoding="utf-8")
-
-
-def test_pre_release_of_the_floor_is_rejected(tmp_path: Path) -> None:
-    # 0.13.0rc1 is a pre-release of the floor, and semver puts it below 0.13.0: the
-    # declared floor is the stable release, so this must not pass as 0.13.0.
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log, version="0.13.0rc1")
-    _fake_greenhouses(tool_bin)
-
-    result = _run([], [bin_dir, tool_bin])
-
-    assert result.returncode == 1
-    assert "0.13.0" in result.stderr
-    assert "tool install" not in log.read_text(encoding="utf-8")
-
-
-def test_a_newer_version_with_a_suffix_is_accepted(tmp_path: Path) -> None:
-    # A pre-release is below its own release, not below earlier ones: 0.14.0-dev.1 is
-    # above 0.13.0, so a newer development build must not be refused.
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log, version="0.14.0-dev.1")
-    _fake_greenhouses(tool_bin)
-
-    result = _run([], [bin_dir, tool_bin])
-
-    assert result.returncode == 0
-
-
-def test_build_metadata_on_the_floor_is_accepted(tmp_path: Path) -> None:
-    # Build metadata does not order a version: 0.13.0+build5 is 0.13.0.
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log, version="0.13.0+build5")
-    _fake_greenhouses(tool_bin)
-
-    result = _run([], [bin_dir, tool_bin])
-
-    assert result.returncode == 0
+    assert result.returncode == status
+    if status == 1:
+        assert "0.13.0" in result.stderr
+        # The policy is checked before any other `uv` command runs.
+        assert uv_log.strip() == "--version"
 
 
 def test_unreadable_uv_version_exits_one(tmp_path: Path) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log, version="unknown")
-    _fake_greenhouses(tool_bin)
-
-    result = _run([], [bin_dir, tool_bin])
+    result, uv_log, _ = _installer(tmp_path, version="unknown")
 
     assert result.returncode == 1
     assert "uv --version" in result.stderr
-    assert "tool install" not in log.read_text(encoding="utf-8")
+    assert "tool install" not in uv_log
 
 
 def test_missing_tool_bin_dir_exits_one_before_install(tmp_path: Path) -> None:
-    bin_dir = tmp_path / "bin"
+    bin_dir, tool_bin = tmp_path / "bin", tmp_path / "tools"
     bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
     tool_bin.mkdir()
     log = tmp_path / "uv.log"
     _fake_uv(bin_dir, tool_bin, log)
@@ -201,51 +158,27 @@ def test_missing_tool_bin_dir_exits_one_before_install(tmp_path: Path) -> None:
 
 
 def test_successful_install(tmp_path: Path) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log)
-    _fake_greenhouses(tool_bin)
-
-    result = _run([], [bin_dir, tool_bin])
+    result, uv_log, _ = _installer(tmp_path)
 
     assert result.returncode == 0
-    assert "tool install --editable --force --no-build ." in log.read_text(encoding="utf-8")
+    assert "tool install --editable --force --no-build ." in uv_log
     assert "0.1.0" in result.stdout
 
 
 def test_greenhouses_is_run_with_version(tmp_path: Path) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    cli_log = tmp_path / "greenhouses.log"
-    _fake_uv(bin_dir, tool_bin, log)
-    _fake_greenhouses(tool_bin, log=cli_log)
-
-    result = _run([], [bin_dir, tool_bin])
+    result, _, cli_log = _installer(tmp_path)
 
     assert result.returncode == 0
-    assert cli_log.read_text(encoding="utf-8").strip() == "--version"
+    assert cli_log.strip() == "--version"
 
 
 def test_an_earlier_greenhouses_on_path_is_not_the_one_verified(tmp_path: Path) -> None:
     # A stale `greenhouses` earlier on PATH must not be what the installer verifies.
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
     earlier = tmp_path / "earlier"
     earlier.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log)
-    _fake_greenhouses(tool_bin)
     _fake_greenhouses(earlier, version="9.9.9")
 
-    result = _run([], [earlier, bin_dir, tool_bin])
+    result, _, _ = _installer(tmp_path, extra_path=(earlier,))
 
     assert result.returncode == 0
     assert "0.1.0" in result.stdout
@@ -253,15 +186,7 @@ def test_an_earlier_greenhouses_on_path_is_not_the_one_verified(tmp_path: Path) 
 
 
 def test_a_failing_install_is_reported(tmp_path: Path) -> None:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    tool_bin = tmp_path / "tools"
-    tool_bin.mkdir()
-    log = tmp_path / "uv.log"
-    _fake_uv(bin_dir, tool_bin, log, install_status=1)
-    _fake_greenhouses(tool_bin)
-
-    result = _run([], [bin_dir, tool_bin])
+    result, _, _ = _installer(tmp_path, install_status=1)
 
     assert result.returncode != 0
     assert "0.1.0" not in result.stdout

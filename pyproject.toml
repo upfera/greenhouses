@@ -24,6 +24,11 @@ test = [
     "ruff>=0.6",
 ]
 
+# The same floor the installer enforces, so `uv sync` and `uv run` refuse a
+# below-floor or pre-release uv with uv's own message (PEP 440 specifier).
+[tool.uv]
+required-version = ">=0.13.0"
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

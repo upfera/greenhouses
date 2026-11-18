@@ -11,7 +11,7 @@ currently contains only the package skeleton, the installable `greenhouses` comm
 
 ## Prerequisites
 
-- `uv` 0.13.0 or newer on `PATH`.
+- `uv` 0.13.0 or newer on `PATH`, as a stable release: pre-releases are refused.
 - The uv tool binary directory on `PATH`. Print it with:
 
   ```sh
