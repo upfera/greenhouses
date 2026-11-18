@@ -23,14 +23,32 @@ organization's [CONTRIBUTING.md](https://github.com/upfera/.github/blob/main/CON
 
 ## Project commands
 
-Fill in for this repository, or delete this section if the project has no build or tests:
+- Build: `uv sync --locked --group test`
+- Test: `uv run --locked --group test pytest`
+- Lint/format: `uv run --locked --group test ruff check .` and `uv run --locked --group test ruff format --check .`
+- Types: `uv run --locked --group test mypy src`
 
-- Build: `TODO`
-- Test: `TODO`
-- Lint/format: `TODO`
+Tests run only via `uv run --locked --group test pytest`; running `pytest` outside `uv run` is
+not supported.
 
-While a command is still `TODO`, ask instead of guessing it.
+## Architecture
 
-## More context
-
-Longer agent-facing material (specs, decisions, prompts, skills) lives in [`.ai/`](.ai/).
+- `core/` contains domain logic and depends on nothing in `runtime/`, `roles/`, `cli/`,
+  `profiles/`, any provider or infrastructure.
+- Core domain logic does not access the environment or the filesystem.
+- Only the CLI and profiles resolve user configuration from environment variables and
+  configuration files. The CLI's only other environment access is the standard locale lookup
+  for messages.
+- Runtime operations may access the filesystem and external systems through explicit
+  interfaces.
+- A role never publishes. Publication is a runtime operation.
+- New ports and modules come with a real call site in a test or flow, never speculatively.
+- A revision is computed only by `compute_revision`.
+- Core names stay generic. Domain concepts are named for their role in a two-phase automation
+  (`WorkItem`, `Revision`, `Artifact`, `Finalization`), never for one catalogue entry. GitHub,
+  Jira, issue, pull request and factory-role names live in adapters or catalogue code, not in
+  `core/`.
+- Provider-specific behaviour does not leak into core.
+- The CLI is the public entry point. Users run `greenhouses`, never `python` or `uv run`.
+- Rules are short and, where a test exists, enforced by it.
+- Longer agent-facing material lives in [`.ai/`](.ai/).

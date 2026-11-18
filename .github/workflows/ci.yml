@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Sync
+        run: uv sync --locked --group test
+      - name: Lint
+        run: uv run --locked --group test ruff check .
+      - name: Format
+        run: uv run --locked --group test ruff format --check .
+      - name: Types
+        run: uv run --locked --group test mypy src
+      - name: Tests
+        run: uv run --locked --group test pytest --cov --cov-report=xml
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v5
+      - name: Add uv tool binary directory to PATH
+        run: uv tool dir --bin >> "$GITHUB_PATH"
+      - name: Install
+        run: ./install.sh
+      - name: Verify installed CLI from outside the repository
+        run: |
+          tmp_dir="$(mktemp -d)"
+          echo "tmp_dir=$tmp_dir" >> "$GITHUB_ENV"
+          cd "$tmp_dir"
+          greenhouses --version
+          test "$(greenhouses --version)" = "0.1.0"
+          greenhouses --help
+          code=0
+          greenhouses --unknown 2> stderr.txt || code=$?
+          test "$code" -eq 2
+          test -s stderr.txt
+      - name: Remove temporary directory
+        if: always()
+        run: |
+          if [ -n "${tmp_dir:-}" ]; then
+            rm -rf "$tmp_dir"
+          fi
