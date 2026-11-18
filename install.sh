@@ -29,6 +29,32 @@ if ! command -v uv >/dev/null 2>&1; then
     exit 1
 fi
 
+# Parsed with parameter expansion only: the tests run this script on a minimal PATH.
+uv_version=$(uv --version)
+uv_version=${uv_version#* }
+uv_version=${uv_version%% *}
+uv_major=${uv_version%%.*}
+uv_rest=${uv_version#*.}
+uv_minor=${uv_rest%%.*}
+case "$uv_major" in
+    *[!0-9]*) uv_major=${uv_major%%[!0-9]*} ;;
+esac
+case "$uv_minor" in
+    *[!0-9]*) uv_minor=${uv_minor%%[!0-9]*} ;;
+esac
+
+if [ -z "$uv_major" ] || [ -z "$uv_minor" ]; then
+    echo "error: could not read the uv version from 'uv --version'." >&2
+    exit 1
+fi
+
+if [ "$uv_major" -eq 0 ] && [ "$uv_minor" -lt 13 ]; then
+    echo "error: uv $uv_version is too old; 0.13.0 or newer is required." >&2
+    echo "Below 0.13.0, '--no-build' also blocks building this project from source." >&2
+    echo "Update uv from https://docs.astral.sh/uv/ and run this script again." >&2
+    exit 1
+fi
+
 tool_bin_dir=$(uv tool dir --bin)
 
 case ":${PATH-}:" in

@@ -20,11 +20,15 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(stat.S_IRWXU)
 
 
-def _fake_uv(bin_dir: Path, tool_bin: Path, log: Path) -> None:
+def _fake_uv(bin_dir: Path, tool_bin: Path, log: Path, version: str = "0.13.9") -> None:
     _write_executable(
         bin_dir / "uv",
         "#!/bin/sh\n"
         f'echo "$@" >> "{log}"\n'
+        'if [ "$1" = "--version" ]; then\n'
+        f'    echo "uv {version}"\n'
+        "    exit 0\n"
+        "fi\n"
         'if [ "$1" = "tool" ] && [ "$2" = "dir" ] && [ "$3" = "--bin" ]; then\n'
         f'    echo "{tool_bin}"\n'
         "    exit 0\n"
@@ -74,6 +78,52 @@ def test_missing_uv_exits_one_without_running_uv(tmp_path: Path) -> None:
     assert result.returncode == 1
     assert "uv" in result.stderr
     assert not log.exists()
+
+
+def test_old_uv_exits_one_with_the_required_version(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    log = tmp_path / "uv.log"
+    _fake_uv(bin_dir, tool_bin, log, version="0.12.0")
+    _fake_greenhouses(tool_bin)
+
+    result = _run([], [bin_dir, tool_bin])
+
+    assert result.returncode == 1
+    assert "0.13.0" in result.stderr
+    assert "tool install" not in log.read_text(encoding="utf-8")
+
+
+def test_pre_release_uv_version_does_not_abort_the_check(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    log = tmp_path / "uv.log"
+    _fake_uv(bin_dir, tool_bin, log, version="0.13.0rc1")
+    _fake_greenhouses(tool_bin)
+
+    result = _run([], [bin_dir, tool_bin])
+
+    assert result.returncode == 0
+
+
+def test_unreadable_uv_version_exits_one(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    log = tmp_path / "uv.log"
+    _fake_uv(bin_dir, tool_bin, log, version="unknown")
+    _fake_greenhouses(tool_bin)
+
+    result = _run([], [bin_dir, tool_bin])
+
+    assert result.returncode == 1
+    assert "uv --version" in result.stderr
+    assert "tool install" not in log.read_text(encoding="utf-8")
 
 
 def test_missing_tool_bin_dir_exits_one_before_install(tmp_path: Path) -> None:
