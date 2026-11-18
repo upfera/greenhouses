@@ -9,3 +9,20 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+dist/
+build/
+.greenhouses/
+*.sqlite
+*.sqlite3
+coverage.xml
+.coverage
+
+# Tool caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
