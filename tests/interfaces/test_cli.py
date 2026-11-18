@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import builtins
+import io
 import os
 from typing import Any
 
@@ -71,13 +72,21 @@ def test_help_reads_only_locale_variables_and_no_files(monkeypatch: Any, capsys:
 
     opened: list[tuple[Any, ...]] = []
     real_open = builtins.open
+    real_os_open = os.open
 
     def recording_open(*args: Any, **kwargs: Any) -> Any:
         opened.append(args)
         return real_open(*args, **kwargs)
 
+    def recording_os_open(path: Any, *args: Any, **kwargs: Any) -> int:
+        opened.append((path, *args))
+        return real_os_open(path, *args, **kwargs)
+
     with monkeypatch.context() as patched:
+        # Every way in: `builtins.open`, its `io.open` alias and the `os.open` syscall.
         patched.setattr(builtins, "open", recording_open)
+        patched.setattr(io, "open", recording_open)
+        patched.setattr(os, "open", recording_os_open)
         assert main(["--help"]) == 0
 
     captured = capsys.readouterr()

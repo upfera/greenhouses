@@ -20,7 +20,9 @@ def _write_executable(path: Path, content: str) -> None:
     path.chmod(stat.S_IRWXU)
 
 
-def _fake_uv(bin_dir: Path, tool_bin: Path, log: Path, version: str = "0.13.9") -> None:
+def _fake_uv(
+    bin_dir: Path, tool_bin: Path, log: Path, version: str = "0.13.9", install_status: int = 0
+) -> None:
     _write_executable(
         bin_dir / "uv",
         "#!/bin/sh\n"
@@ -34,14 +36,17 @@ def _fake_uv(bin_dir: Path, tool_bin: Path, log: Path, version: str = "0.13.9") 
         "    exit 0\n"
         "fi\n"
         'if [ "$1" = "tool" ] && [ "$2" = "install" ]; then\n'
-        "    exit 0\n"
+        f"    exit {install_status}\n"
         "fi\n"
         "exit 0\n",
     )
 
 
-def _fake_greenhouses(bin_dir: Path) -> None:
-    _write_executable(bin_dir / "greenhouses", "#!/bin/sh\necho 0.1.0\n")
+def _fake_greenhouses(bin_dir: Path, log: Path | None = None, version: str = "0.1.0") -> None:
+    body = f"echo {version}\n"
+    if log is not None:
+        body = f'echo "$@" >> "{log}"\n' + body
+    _write_executable(bin_dir / "greenhouses", "#!/bin/sh\n" + body)
 
 
 def _run(args: list[str], path_dirs: list[Path]) -> subprocess.CompletedProcess[str]:
@@ -93,7 +98,8 @@ def test_old_uv_exits_one_with_the_required_version(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert "0.13.0" in result.stderr
-    assert "tool install" not in log.read_text(encoding="utf-8")
+    # Nothing beyond the version check ran, `uv tool dir --bin` included.
+    assert log.read_text(encoding="utf-8").strip() == "--version"
 
 
 def test_top_of_the_old_band_is_rejected(tmp_path: Path) -> None:
@@ -176,3 +182,54 @@ def test_successful_install(tmp_path: Path) -> None:
     assert result.returncode == 0
     assert "tool install --editable --force --no-build ." in log.read_text(encoding="utf-8")
     assert "0.1.0" in result.stdout
+
+
+def test_greenhouses_is_run_with_version(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    log = tmp_path / "uv.log"
+    cli_log = tmp_path / "greenhouses.log"
+    _fake_uv(bin_dir, tool_bin, log)
+    _fake_greenhouses(tool_bin, log=cli_log)
+
+    result = _run([], [bin_dir, tool_bin])
+
+    assert result.returncode == 0
+    assert cli_log.read_text(encoding="utf-8").strip() == "--version"
+
+
+def test_an_earlier_greenhouses_on_path_is_not_the_one_verified(tmp_path: Path) -> None:
+    # A stale `greenhouses` earlier on PATH must not be what the installer verifies.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    earlier = tmp_path / "earlier"
+    earlier.mkdir()
+    log = tmp_path / "uv.log"
+    _fake_uv(bin_dir, tool_bin, log)
+    _fake_greenhouses(tool_bin)
+    _fake_greenhouses(earlier, version="9.9.9")
+
+    result = _run([], [earlier, bin_dir, tool_bin])
+
+    assert result.returncode == 0
+    assert "0.1.0" in result.stdout
+    assert "9.9.9" not in result.stdout
+
+
+def test_a_failing_install_is_reported(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    tool_bin = tmp_path / "tools"
+    tool_bin.mkdir()
+    log = tmp_path / "uv.log"
+    _fake_uv(bin_dir, tool_bin, log, install_status=1)
+    _fake_greenhouses(tool_bin)
+
+    result = _run([], [bin_dir, tool_bin])
+
+    assert result.returncode != 0
+    assert "0.1.0" not in result.stdout
