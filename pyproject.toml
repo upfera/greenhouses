@@ -1,7 +1,7 @@
 [project]
 name = "greenhouses"
 version = "0.1.0"
-description = "Vendor-neutral platform for two-phase automations."
+description = "Vendor-neutral platform for supervised automations."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = []

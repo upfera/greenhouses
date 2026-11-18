@@ -42,8 +42,8 @@ Implemented in this repository:
 
 Planned, not implemented:
 
-- A runtime for two-phase automations (an untrusted execution phase, then a trusted
-  finalization phase), with the software factory as its first catalogue entry.
+- A runtime for supervised automations (execution in isolation, then validation and external
+  effects through a trusted supervisor), with the software factory as its first catalogue entry.
 - `roles`, `profiles`, ports, persistence, artifacts and provider integrations.
 
 ## Installation

@@ -1,4 +1,4 @@
-"""Revision primitive for two-phase automations.
+"""Revision primitive for supervised automations.
 
 A revision identifies an item's content so that a later finalization can detect
 whether the item changed after a result was produced. It is computed only here.

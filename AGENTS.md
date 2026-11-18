@@ -44,7 +44,7 @@ not supported.
 - A role never publishes. Publication is a runtime operation.
 - New ports and modules come with a real call site in a test or flow, never speculatively.
 - A revision is computed only by `compute_revision`.
-- Core names stay generic. Domain concepts are named for their role in a two-phase automation
+- Core names stay generic. Domain concepts are named for their role in a supervised automation
   (`WorkItem`, `Revision`, `Artifact`, `Finalization`), never for one catalogue entry. GitHub,
   Jira, issue, pull request and factory-role names live in adapters or catalogue code, not in
   `core/`.
