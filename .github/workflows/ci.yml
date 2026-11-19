@@ -41,6 +41,12 @@ jobs:
       # Reporting runs after the gates so a failure here can never skip them, and
       # each step is `if: ${{ !cancelled() }}` so the report, artifacts and summary
       # survive a failing test run without running after a cancelled one.
+      - name: Test summary
+        if: ${{ !cancelled() }}
+        # Renders the run summary from the reports; see .github/actions/test-summary.
+        uses: ./.github/actions/test-summary
+        with:
+          output: reports/test-summary.md
       - name: Upload test and coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -52,12 +58,6 @@ jobs:
             htmlcov/
             reports/test-summary.md
           retention-days: 7
-      - name: Test summary
-        if: ${{ !cancelled() }}
-        # Renders the run summary from the reports; see .github/actions/test-summary.
-        uses: ./.github/actions/test-summary
-        with:
-          output: reports/test-summary.md
 
   install:
     runs-on: ubuntu-latest
