@@ -12,14 +12,14 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    # Scoped to the steps that use it, on top of the workflow-level `contents: read`:
-    #   checks: write  - publish the test report as a check run
-    # The reporter reads the local `junit.xml` and takes the run context from the
-    # environment, so it needs no `actions: read`. That permission is for fetching a
-    # report as an artifact from another workflow run, which this workflow does not do.
+    # Scoped to the step that uses it, on top of the workflow-level `contents: read`:
+    #   code-quality: write  - upload the coverage report to GitHub Code Quality, which
+    #                          then comments the coverage summary on the pull request.
+    # No `checks: write`: the test results are published as artifacts and in the step
+    # summary, not as a check run.
     permissions:
       contents: read
-      checks: write
+      code-quality: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -39,7 +39,7 @@ jobs:
       - name: Types
         run: uv run --locked --group test --no-build mypy src
       - name: Tests
-        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --junitxml=junit.xml
+        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --cov-report=html --junitxml=junit.xml
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
@@ -47,23 +47,13 @@ jobs:
       # Reporting runs after the gates so a failure here can never skip them, and
       # each step is `if: ${{ !cancelled() }}` so the report, artifacts and summary
       # survive a failing test run without running after a cancelled one.
-      - name: Publish test report
-        if: ${{ !cancelled() }}
-        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+      - name: Upload coverage report
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52 # v1.4.4
         with:
-          name: Test results
-          path: junit.xml
-          reporter: python-xunit
-          # `fail-on-error` keeps its default of true, deliberately: the action fails this
-          # step when the report holds a failing test, and the check run's conclusion
-          # follows it. Setting it false was measured on a scratch branch and turns the
-          # check green while the suite is red, which would defeat the point of the check.
-          # The extra red step is the cost of a red check.
-          # An empty report (the suite never ran, e.g. a lint failure) is not itself a test
-          # failure; the Tests step already owns the run's outcome.
-          fail-on-empty: false
-          # Keep $GITHUB_STEP_SUMMARY short; the check run carries the per-test detail.
-          use-actions-summary: false
+          file: coverage.xml
+          language: Python
+          label: code-coverage/pytest
       - name: Upload test and coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -72,6 +62,7 @@ jobs:
           path: |
             junit.xml
             coverage.xml
+            htmlcov/
           retention-days: 7
       - name: Summary
         if: ${{ !cancelled() }}
@@ -85,10 +76,16 @@ jobs:
           if os.path.exists("junit.xml"):
               root = ET.parse("junit.xml").getroot()
               suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
+              cases = [c for s in suites for c in s.findall("testcase")]
+              broken = [c for c in cases if c.find("failure") is not None or c.find("error") is not None]
               tests = sum(int(s.get("tests", 0)) for s in suites)
               failed = sum(int(s.get("failures", 0)) + int(s.get("errors", 0)) for s in suites)
               skipped = sum(int(s.get("skipped", 0)) for s in suites)
               lines.append(f"Tests: {tests - failed - skipped} passed, {failed} failed, {skipped} skipped")
+              if broken:
+                  # The artifact holds the detail; this names what failed without a download.
+                  names = ", ".join(c.get("name", "?") for c in broken[:5])
+                  lines.append(f"Failed: {names}" + (" and more" if len(broken) > 5 else ""))
           else:
               lines.append("Tests: no JUnit report was produced")
 

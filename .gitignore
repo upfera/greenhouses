@@ -20,6 +20,7 @@ build/
 *.sqlite
 *.sqlite3
 coverage.xml
+htmlcov/
 .coverage
 
 # Tool caches
