@@ -60,6 +60,9 @@ jobs:
           summary-report: true
           test-report: true
           failed-report: true
+          # The suite is 45 tests and will grow; collapsing the tables keeps the counts and
+          # the failure analysis in view while the per-test detail stays one click away.
+          collapse-large-reports: true
           # A status check makes the report visible in the pull request's checks, and the
           # action's default `summary: true` writes it to the run summary as well. The
           # action reads the token from the environment; without it the check is skipped
