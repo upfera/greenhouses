@@ -1,0 +1,27 @@
+name: Test summary
+description: Render a test summary from the JUnit and coverage reports into the run summary.
+
+inputs:
+  junit-path:
+    description: Path to the JUnit XML report.
+    required: false
+    default: junit.xml
+  coverage-path:
+    description: Path to the Cobertura coverage report.
+    required: false
+    default: coverage.xml
+  output:
+    description: Optional path to also write the Markdown to, for the run artifact.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Render the summary
+      shell: bash
+      run: |
+        python3 "$GITHUB_ACTION_PATH/render.py" \
+          "${{ inputs.junit-path }}" \
+          "${{ inputs.coverage-path }}" \
+          "${{ inputs.output }}"

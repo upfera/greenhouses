@@ -33,14 +33,7 @@ jobs:
       - name: Types
         run: uv run --locked --group test --no-build mypy src
       - name: Tests
-        env:
-          # The HTML report carries no third-party branding of ours.
-          PYREPT_LOGO: none
-        run: |
-          uv run --locked --group test --no-build pytest \
-            --cov --cov-report=xml --cov-report=html \
-            --junitxml=junit.xml \
-            --pyrept --pyrept-html=reports/tests.html --pyrept-github-summary
+        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --cov-report=html --junitxml=junit.xml
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
@@ -57,25 +50,14 @@ jobs:
             junit.xml
             coverage.xml
             htmlcov/
-            reports/tests.html
+            reports/test-summary.md
           retention-days: 7
-      - name: Summary
+      - name: Test summary
         if: ${{ !cancelled() }}
-        # The test part of the summary comes from pyrept; coverage is not its business.
-        run: |
-          python3 - <<'PY'
-          import os
-          import xml.etree.ElementTree as ET
-
-          if os.path.exists("coverage.xml"):
-              rate = float(ET.parse("coverage.xml").getroot().get("line-rate", "0"))
-              line = f"Coverage: {rate * 100:.1f}% of lines"
-          else:
-              line = "Coverage: no report was produced"
-
-          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-              summary.write(f"- {line}\n")
-          PY
+        # Renders the run summary from the reports; see .github/actions/test-summary.
+        uses: ./.github/actions/test-summary
+        with:
+          output: reports/test-summary.md
 
   install:
     runs-on: ubuntu-latest
