@@ -12,13 +12,15 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    # Scoped to the step that uses it, on top of the workflow-level `contents: read`:
+    # Scoped to the steps that use them, on top of the workflow-level `contents: read`:
+    #   checks: write        - publish the test report as a check run
     #   code-quality: write  - upload the coverage report to GitHub Code Quality, which
     #                          then comments the coverage summary on the pull request.
-    # No `checks: write`: the test results are published as artifacts and in the step
-    # summary, not as a check run.
+    # The JUnit report is converted to CTRF first, because that is the format the test
+    # reporter consumes; no other third-party reporting action is used.
     permissions:
       contents: read
+      checks: write
       code-quality: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -47,6 +49,20 @@ jobs:
       # Reporting runs after the gates so a failure here can never skip them, and
       # each step is `if: ${{ !cancelled() }}` so the report, artifacts and summary
       # survive a failing test run without running after a cancelled one.
+      - name: Convert the JUnit report to CTRF
+        if: ${{ !cancelled() }}
+        run: |
+          if [ -f junit.xml ]; then
+            npx --yes junit-to-ctrf junit.xml -o ctrf/ctrf-report.json
+          else
+            echo "no junit.xml to convert"
+          fi
+      - name: Publish test report
+        # Skipped for pull requests from forks: those runs get a read-only token.
+        if: ${{ !cancelled() && hashFiles('ctrf/ctrf-report.json') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: ctrf-io/github-test-reporter@dbb08957b5b2af918b39136ab2c5532002c7649b # v1.3.2
+        with:
+          report-path: ctrf/ctrf-report.json
       - name: Upload coverage report
         # Skipped for pull requests from forks: those runs get a read-only token.
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -69,6 +85,7 @@ jobs:
             junit.xml
             coverage.xml
             htmlcov/
+            ctrf/
           retention-days: 7
       - name: Summary
         if: ${{ !cancelled() }}
