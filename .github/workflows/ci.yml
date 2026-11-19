@@ -48,12 +48,18 @@ jobs:
       # each step is `if: ${{ !cancelled() }}` so the report, artifacts and summary
       # survive a failing test run without running after a cancelled one.
       - name: Upload coverage report
+        # Skipped for pull requests from forks: those runs get a read-only token.
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
         uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52 # v1.4.4
         with:
           file: coverage.xml
           language: Python
           label: code-coverage/pytest
+          # Code Quality must be enabled for this repository first (Settings, Security,
+          # Code quality); the plan already allows it. Until it is enabled the upload
+          # answers 403, and a warning is the honest outcome: the coverage report is still
+          # published as an artifact and in the summary below.
+          fail-on-error: false
       - name: Upload test and coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
