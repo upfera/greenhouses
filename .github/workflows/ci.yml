@@ -34,6 +34,8 @@ jobs:
         run: uv run --locked --group test --no-build mypy src
       - name: Tests
         run: |
+          # pytest-cov and pytest-html write into an existing directory only.
+          mkdir -p reports
           uv run --locked --group test --no-build pytest \
             --cov \
             --cov-report=xml \
@@ -41,6 +43,7 @@ jobs:
             --cov-report=markdown:reports/coverage.md \
             --cov-report=markdown-append:"$GITHUB_STEP_SUMMARY" \
             --junitxml=junit.xml
+            --html=reports/tests.html --self-contained-html
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
