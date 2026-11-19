@@ -14,11 +14,12 @@ jobs:
     runs-on: ubuntu-latest
     # Scoped to the steps that use it, on top of the workflow-level `contents: read`:
     #   checks: write  - publish the test report as a check run
-    #   actions: read  - let the test reporter read this workflow run
+    # The reporter reads the local `junit.xml` and takes the run context from the
+    # environment, so it needs no `actions: read`. That permission is for fetching a
+    # report as an artifact from another workflow run, which this workflow does not do.
     permissions:
       contents: read
       checks: write
-      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -44,10 +45,10 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
       # Reporting runs after the gates so a failure here can never skip them, and
-      # each step is `if: always()` so the report, artifacts and summary survive a
-      # failing test run.
+      # each step is `if: ${{ !cancelled() }}` so the report, artifacts and summary
+      # survive a failing test run without running after a cancelled one.
       - name: Publish test report
-        if: always()
+        if: ${{ !cancelled() }}
         uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
         with:
           name: Test results
@@ -59,7 +60,7 @@ jobs:
           # Keep $GITHUB_STEP_SUMMARY short; the check run carries the per-test detail.
           use-actions-summary: false
       - name: Upload test and coverage reports
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: test-and-coverage-reports
@@ -68,7 +69,7 @@ jobs:
             coverage.xml
           retention-days: 7
       - name: Summary
-        if: always()
+        if: ${{ !cancelled() }}
         run: |
           python3 - <<'PY'
           import os
