@@ -33,7 +33,14 @@ jobs:
       - name: Types
         run: uv run --locked --group test --no-build mypy src
       - name: Tests
-        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --cov-report=html --junitxml=junit.xml
+        env:
+          # The HTML report carries no third-party branding of ours.
+          PYREPT_LOGO: none
+        run: |
+          uv run --locked --group test --no-build pytest \
+            --cov --cov-report=xml --cov-report=html \
+            --junitxml=junit.xml \
+            --pyrept --pyrept-html=reports/tests.html --pyrept-github-summary
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
@@ -50,42 +57,24 @@ jobs:
             junit.xml
             coverage.xml
             htmlcov/
+            reports/tests.html
           retention-days: 7
       - name: Summary
         if: ${{ !cancelled() }}
+        # The test part of the summary comes from pyrept; coverage is not its business.
         run: |
           python3 - <<'PY'
           import os
           import xml.etree.ElementTree as ET
 
-          lines = []
-
-          if os.path.exists("junit.xml"):
-              root = ET.parse("junit.xml").getroot()
-              suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
-              cases = [c for s in suites for c in s.findall("testcase")]
-              broken = [c for c in cases if c.find("failure") is not None or c.find("error") is not None]
-              tests = sum(int(s.get("tests", 0)) for s in suites)
-              failed = sum(int(s.get("failures", 0)) + int(s.get("errors", 0)) for s in suites)
-              skipped = sum(int(s.get("skipped", 0)) for s in suites)
-              lines.append(f"Tests: {tests - failed - skipped} passed, {failed} failed, {skipped} skipped")
-              if broken:
-                  # The artifact holds the detail; this names what failed without a download.
-                  names = ", ".join(c.get("name", "?") for c in broken[:5])
-                  lines.append(f"Failed: {names}" + (" and more" if len(broken) > 5 else ""))
-          else:
-              lines.append("Tests: no JUnit report was produced")
-
           if os.path.exists("coverage.xml"):
               rate = float(ET.parse("coverage.xml").getroot().get("line-rate", "0"))
-              lines.append(f"Coverage: {rate * 100:.1f}% of lines")
+              line = f"Coverage: {rate * 100:.1f}% of lines"
           else:
-              lines.append("Coverage: no report was produced")
+              line = "Coverage: no report was produced"
 
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
-              summary.write("### CI summary\n\n")
-              summary.write("\n".join(f"- {line}" for line in lines))
-              summary.write("\n")
+              summary.write(f"- {line}\n")
           PY
 
   install:
