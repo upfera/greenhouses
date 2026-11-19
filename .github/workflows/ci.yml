@@ -2,6 +2,9 @@ name: CI
 
 on:
   push:
+    # A branch with an open pull request is covered by `pull_request`; without this
+    # filter every commit to it runs the whole job twice.
+    branches: [main]
   pull_request:
 
 # Minimum permissions for the workflow, read-only. Jobs and steps that need
@@ -41,7 +44,6 @@ jobs:
             --cov-report=xml \
             --cov-report=html \
             --cov-report=markdown:reports/coverage.md \
-            --cov-report=markdown-append:"$GITHUB_STEP_SUMMARY" \
             --junitxml=junit.xml \
             --html=reports/tests.html --self-contained-html
       - name: SonarCloud scan
@@ -51,12 +53,44 @@ jobs:
       # Reporting runs after the gates so a failure here can never skip them, and
       # each step is `if: ${{ !cancelled() }}` so the report, artifacts and summary
       # survive a failing test run without running after a cancelled one.
-      - name: Test summary
+      - name: Summary
         if: ${{ !cancelled() }}
-        # Renders the run summary from the reports; see .github/actions/test-summary.
-        uses: ./.github/actions/test-summary
-        with:
-          output: reports/test-summary.md
+        # A short report in the run summary: the test counts with the failing tests,
+        # and the coverage table pytest-cov wrote underneath.
+        run: |
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+          from pathlib import Path
+
+          out = []
+          if Path("junit.xml").exists():
+              root = ET.parse("junit.xml").getroot()
+              suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
+              total = sum(int(s.get("tests", 0)) for s in suites)
+              failed = sum(int(s.get("failures", 0)) + int(s.get("errors", 0)) for s in suites)
+              skipped = sum(int(s.get("skipped", 0)) for s in suites)
+              seconds = sum(float(s.get("time", 0)) for s in suites)
+              passed = total - failed - skipped
+              icon = "\u274c" if failed else "\u2705"
+              out.append(f"### {icon} Tests: {passed} passed, {failed} failed, {skipped} skipped")
+              out.append("| Total | \u2705 Passed | \u274c Failed | \u23ed\ufe0f Skipped | \u23f1\ufe0f Duration |")
+              out.append("|---:|---:|---:|---:|---:|")
+              out.append(f"| {total} | {passed} | {failed} | {skipped} | {seconds:.2f}s |")
+              names = [
+                  f"{c.get('classname', '')}::{c.get('name', '')}".lstrip(":")
+                  for s in suites
+                  for c in s.findall("testcase")
+                  if c.find("failure") is not None or c.find("error") is not None
+              ]
+              if names:
+                  out += ["", "<details><summary>\u274c Failing tests</summary>", ""]
+                  out += [f"- `{n}`" for n in names]
+                  out += ["", "</details>"]
+          if Path("reports/coverage.md").exists():
+              out += ["", "### \U0001f4ca Coverage", Path("reports/coverage.md").read_text(encoding="utf-8").strip()]
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(out) + "\n", encoding="utf-8")
+          PY
       - name: Upload test and coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
