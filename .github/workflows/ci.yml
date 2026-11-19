@@ -16,8 +16,8 @@ jobs:
     #   checks: write        - publish the test report as a check run
     #   code-quality: write  - upload the coverage report to GitHub Code Quality, which
     #                          then comments the coverage summary on the pull request.
-    # The JUnit report is converted to CTRF first, because that is the format the test
-    # reporter consumes; no other third-party reporting action is used.
+    # `pytest-json-ctrf` writes the CTRF report the test reporter consumes, from the same
+    # test run. No package is fetched at run time.
     permissions:
       contents: read
       checks: write
@@ -41,7 +41,7 @@ jobs:
       - name: Types
         run: uv run --locked --group test --no-build mypy src
       - name: Tests
-        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --cov-report=html --junitxml=junit.xml
+        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --cov-report=html --junitxml=junit.xml --ctrf ctrf-report.json
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
@@ -49,20 +49,12 @@ jobs:
       # Reporting runs after the gates so a failure here can never skip them, and
       # each step is `if: ${{ !cancelled() }}` so the report, artifacts and summary
       # survive a failing test run without running after a cancelled one.
-      - name: Convert the JUnit report to CTRF
-        if: ${{ !cancelled() }}
-        run: |
-          if [ -f junit.xml ]; then
-            npx --yes junit-to-ctrf junit.xml -o ctrf/ctrf-report.json
-          else
-            echo "no junit.xml to convert"
-          fi
       - name: Publish test report
         # Skipped for pull requests from forks: those runs get a read-only token.
-        if: ${{ !cancelled() && hashFiles('ctrf/ctrf-report.json') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ !cancelled() && hashFiles('ctrf-report.json') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
         uses: ctrf-io/github-test-reporter@dbb08957b5b2af918b39136ab2c5532002c7649b # v1.3.2
         with:
-          report-path: ctrf/ctrf-report.json
+          report-path: ctrf-report.json
       - name: Upload coverage report
         # Skipped for pull requests from forks: those runs get a read-only token.
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
@@ -85,7 +77,7 @@ jobs:
             junit.xml
             coverage.xml
             htmlcov/
-            ctrf/
+            ctrf-report.json
           retention-days: 7
       - name: Summary
         if: ${{ !cancelled() }}
