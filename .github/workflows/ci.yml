@@ -55,6 +55,14 @@ jobs:
         uses: ctrf-io/github-test-reporter@dbb08957b5b2af918b39136ab2c5532002c7649b # v1.3.2
         with:
           report-path: ctrf-report.json
+          # Which sections the report carries. Every toggle defaults to false, and with
+          # none set the action picks its own defaults, so they are set explicitly here.
+          summary-report: true
+          test-report: true
+          failed-report: true
+          # A status check makes the report visible in the pull request's checks, and the
+          # action's default `summary: true` writes it to the run summary as well.
+          status-check: true
       - name: Upload coverage report
         # Skipped for pull requests from forks: those runs get a read-only token.
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
