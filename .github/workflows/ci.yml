@@ -54,8 +54,12 @@ jobs:
           name: Test results
           path: junit.xml
           reporter: python-xunit
+          # The reporter reports; it does not judge. The Tests step owns the run's outcome
+          # and the check run carries the failure, so a failing suite must not add a
+          # second red step to the same run.
+          fail-on-error: false
           # An empty report (the suite never ran, e.g. a lint failure) is not itself
-          # a test failure; the Tests step already owns the run's outcome.
+          # a test failure either.
           fail-on-empty: false
           # Keep $GITHUB_STEP_SUMMARY short; the check run carries the per-test detail.
           use-actions-summary: false
