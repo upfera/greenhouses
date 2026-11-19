@@ -1,7 +1,8 @@
-"""Render a test summary from the JUnit and coverage reports.
+"""Render a test summary from the JUnit report.
 
-Writes GitHub-flavoured Markdown: a table of the counts, the failing tests with their
-tracebacks collapsed, and the coverage total. Standard library only.
+Writes GitHub-flavoured Markdown: a table of the counts and the failing tests with their
+tracebacks collapsed. The coverage section of the summary is written by pytest-cov itself
+(`--cov-report=markdown-append:$GITHUB_STEP_SUMMARY`). Standard library only.
 """
 
 from __future__ import annotations
@@ -44,17 +45,9 @@ def junit_summary(path: Path) -> tuple[str, list[tuple[str, str]]]:
     return headline + table, broken
 
 
-def coverage_line(path: Path) -> str:
-    if not path.exists():
-        return "- Coverage: no report was produced"
-    rate = float(ET.parse(path).getroot().get("line-rate", "0"))
-    return f"- Coverage: {rate * 100:.1f}% of lines"
-
-
 def main() -> int:
     junit = Path(sys.argv[1])
-    coverage = Path(sys.argv[2])
-    target = sys.argv[3] if len(sys.argv) > 3 else ""
+    target = sys.argv[2] if len(sys.argv) > 2 else ""
 
     if not junit.exists():
         body = "### Test report\n\nNo JUnit report was produced; the suite did not run.\n"
@@ -69,8 +62,6 @@ def main() -> int:
                 f"\n<details><summary><code>{name}</code></summary>\n\n"
                 f"```text\n{detail}\n```\n\n</details>\n"
             )
-
-    body += "\n" + coverage_line(coverage) + "\n"
 
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
