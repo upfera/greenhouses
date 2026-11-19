@@ -4,12 +4,21 @@ on:
   push:
   pull_request:
 
+# Minimum permissions for the workflow, read-only. Jobs and steps that need
+# more declare it at the narrowest scope that uses it.
 permissions:
   contents: read
 
 jobs:
   checks:
     runs-on: ubuntu-latest
+    # Scoped to the steps that use it, on top of the workflow-level `contents: read`:
+    #   checks: write  - publish the test report as a check run
+    #   actions: read  - let the test reporter read this workflow run
+    permissions:
+      contents: read
+      checks: write
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -29,11 +38,65 @@ jobs:
       - name: Types
         run: uv run --locked --group test --no-build mypy src
       - name: Tests
-        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml
+        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --junitxml=junit.xml
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      # Reporting runs after the gates so a failure here can never skip them, and
+      # each step is `if: always()` so the report, artifacts and summary survive a
+      # failing test run.
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          name: Test results
+          path: junit.xml
+          reporter: python-xunit
+          # An empty report (the suite never ran, e.g. a lint failure) is not itself
+          # a test failure; the Tests step already owns the run's outcome.
+          fail-on-empty: false
+          # Keep $GITHUB_STEP_SUMMARY short; the check run carries the per-test detail.
+          use-actions-summary: false
+      - name: Upload test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-and-coverage-reports
+          path: |
+            junit.xml
+            coverage.xml
+          retention-days: 7
+      - name: Summary
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import os
+          import xml.etree.ElementTree as ET
+
+          lines = []
+
+          if os.path.exists("junit.xml"):
+              root = ET.parse("junit.xml").getroot()
+              suites = root.findall("testsuite") if root.tag == "testsuites" else [root]
+              tests = sum(int(s.get("tests", 0)) for s in suites)
+              failed = sum(int(s.get("failures", 0)) + int(s.get("errors", 0)) for s in suites)
+              skipped = sum(int(s.get("skipped", 0)) for s in suites)
+              lines.append(f"Tests: {tests - failed - skipped} passed, {failed} failed, {skipped} skipped")
+          else:
+              lines.append("Tests: no JUnit report was produced")
+
+          if os.path.exists("coverage.xml"):
+              rate = float(ET.parse("coverage.xml").getroot().get("line-rate", "0"))
+              lines.append(f"Coverage: {rate * 100:.1f}% of lines")
+          else:
+              lines.append("Coverage: no report was produced")
+
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("### CI summary\n\n")
+              summary.write("\n".join(f"- {line}" for line in lines))
+              summary.write("\n")
+          PY
 
   install:
     runs-on: ubuntu-latest
