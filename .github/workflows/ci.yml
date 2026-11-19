@@ -12,16 +12,8 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    # Scoped to the step that uses it, on top of the workflow-level `contents: read`:
-    #   checks: write  - publish the test report as a check run
-    # `pytest-json-ctrf` writes the CTRF report the test reporter consumes, from the same
-    # test run. No package is fetched at run time.
-    # No `code-quality: write`: GitHub Code Quality coverage is available to this repository
-    # but not enabled for it, so the upload would answer 403 on every run. Enabling the
-    # feature is a separate change; the step to add is recorded in issue #3, section 2.
-    permissions:
-      contents: read
-      checks: write
+    # No job-scoped permissions: the workflow-level `contents: read` covers the checkout,
+    # the test run and the artifact upload. Nothing publishes a check run.
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -41,7 +33,7 @@ jobs:
       - name: Types
         run: uv run --locked --group test --no-build mypy src
       - name: Tests
-        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --cov-report=html --junitxml=junit.xml --ctrf ctrf-report.json
+        run: uv run --locked --group test --no-build pytest --cov --cov-report=xml --cov-report=html --junitxml=junit.xml
       - name: SonarCloud scan
         uses: SonarSource/sonarqube-scan-action@59202af334b4ba7b5db01b701b8e79f8b3bef0f4 # v8.5.0
         env:
@@ -49,27 +41,6 @@ jobs:
       # Reporting runs after the gates so a failure here can never skip them, and
       # each step is `if: ${{ !cancelled() }}` so the report, artifacts and summary
       # survive a failing test run without running after a cancelled one.
-      - name: Publish test report
-        # Skipped for pull requests from forks: those runs get a read-only token.
-        if: ${{ !cancelled() && hashFiles('ctrf-report.json') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-        uses: ctrf-io/github-test-reporter@dbb08957b5b2af918b39136ab2c5532002c7649b # v1.3.2
-        with:
-          report-path: ctrf-report.json
-          # Which sections the report carries. Every toggle defaults to false, and with
-          # none set the action picks its own defaults, so they are set explicitly here.
-          summary-report: true
-          test-report: true
-          failed-report: true
-          # The suite is 45 tests and will grow; collapsing the tables keeps the counts and
-          # the failure analysis in view while the per-test detail stays one click away.
-          collapse-large-reports: true
-          # A status check makes the report visible in the pull request's checks, and the
-          # action's default `summary: true` writes it to the run summary as well. The
-          # action reads the token from the environment; without it the check is skipped
-          # with a warning while the rest of the report still works.
-          status-check: true
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
       - name: Upload test and coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -79,7 +50,6 @@ jobs:
             junit.xml
             coverage.xml
             htmlcov/
-            ctrf-report.json
           retention-days: 7
       - name: Summary
         if: ${{ !cancelled() }}
