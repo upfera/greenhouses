@@ -12,16 +12,16 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    # Scoped to the steps that use them, on top of the workflow-level `contents: read`:
-    #   checks: write        - publish the test report as a check run
-    #   code-quality: write  - upload the coverage report to GitHub Code Quality, which
-    #                          then comments the coverage summary on the pull request.
+    # Scoped to the step that uses it, on top of the workflow-level `contents: read`:
+    #   checks: write  - publish the test report as a check run
     # `pytest-json-ctrf` writes the CTRF report the test reporter consumes, from the same
     # test run. No package is fetched at run time.
+    # No `code-quality: write`: GitHub Code Quality coverage is available to this repository
+    # but not enabled for it, so the upload would answer 403 on every run. Enabling the
+    # feature is a separate change; the step to add is recorded in issue #3, section 2.
     permissions:
       contents: read
       checks: write
-      code-quality: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -67,19 +67,6 @@ jobs:
           status-check: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
-      - name: Upload coverage report
-        # Skipped for pull requests from forks: those runs get a read-only token.
-        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
-        uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52 # v1.4.4
-        with:
-          file: coverage.xml
-          language: Python
-          label: code-coverage/pytest
-          # Code Quality must be enabled for this repository first (Settings, Security,
-          # Code quality); the plan already allows it. Until it is enabled the upload
-          # answers 403, and a warning is the honest outcome: the coverage report is still
-          # published as an artifact and in the summary below.
-          fail-on-error: false
       - name: Upload test and coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
