@@ -61,8 +61,12 @@ jobs:
           test-report: true
           failed-report: true
           # A status check makes the report visible in the pull request's checks, and the
-          # action's default `summary: true` writes it to the run summary as well.
+          # action's default `summary: true` writes it to the run summary as well. The
+          # action reads the token from the environment; without it the check is skipped
+          # with a warning while the rest of the report still works.
           status-check: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Upload coverage report
         # Skipped for pull requests from forks: those runs get a read-only token.
         if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
