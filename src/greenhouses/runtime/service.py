@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import timedelta
+from typing import Any, cast
 
 from greenhouses.core.domain.artifact import ARTIFACT_VERSION, Artifact
 from greenhouses.core.domain.configuration import Configuration
@@ -280,13 +281,13 @@ class RunService:
 
     def _advance(self, record: RunRecord, state: RunState) -> RunRecord:
         require_transition(record.state, state)
-        advanced: RunRecord = replace(record, state=state, history=(*record.history, state))
+        advanced = _replaced(record, state=state, history=(*record.history, state))
         self._runs.put(advanced)
         return advanced
 
     def _finalize(self, record: RunRecord, finalization: Finalization, detail: str) -> RunRecord:
         require_transition(record.state, RunState.FINALIZED)
-        finalized: RunRecord = replace(
+        finalized = _replaced(
             record,
             state=RunState.FINALIZED,
             finalization=finalization,
@@ -295,6 +296,17 @@ class RunService:
         )
         self._runs.put(finalized)
         return finalized
+
+
+def _replaced(record: RunRecord, **changes: Any) -> RunRecord:
+    """`replace` for a run record, with the type the analyzer cannot infer.
+
+    ``dataclasses.replace`` returns the same dataclass, but the static analyzer models it as
+    ``DataclassInstance`` and reports both the assignment and the return. Going through
+    ``object`` keeps the cast meaningful for the type checker as well.
+    """
+    replaced: object = replace(record, **changes)
+    return cast(RunRecord, replaced)
 
 
 def _summary(payload: Mapping[str, object]) -> str:
