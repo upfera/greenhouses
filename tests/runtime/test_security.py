@@ -20,8 +20,8 @@ from support import (
 )
 
 from greenhouses.core.domain.artifact import Artifact, JsonValue
-from greenhouses.core.domain.errors import SecretAccessDenied
-from greenhouses.core.domain.execution import ExecutionRequest
+from greenhouses.core.domain.errors import ExecutionFailed, SecretAccessDenied
+from greenhouses.core.domain.execution import ExecutionOutput, ExecutionRequest, ExecutionState
 from greenhouses.core.domain.lifecycle import Finalization
 from greenhouses.core.ports.roles import Role
 from greenhouses.core.ports.secrets import SecretStore
@@ -142,3 +142,61 @@ def test_state_is_not_a_secret_store() -> None:
     for rendered in (record.detail, record.item_id, repr(record), repr(record.history)):
         assert EXECUTION_SECRET_VALUE not in rendered
         assert CONTROL_PLANE_SECRET_VALUE not in rendered
+
+
+class StoreProbeRole:
+    """Tries to reach the store and the resolver behind the execution-facing object."""
+
+    name = "store-probe"
+
+    def __init__(self) -> None:
+        self.public_store: object = "unset"
+        self.denied: SecretAccessDenied | None = None
+
+    def produce(self, request: ExecutionRequest) -> Mapping[str, JsonValue]:
+        self.public_store = getattr(request.secrets, "store", None)
+        resolver = request.secrets._resolve
+        try:
+            resolver(CONTROL_PLANE_SECRET)
+        except SecretAccessDenied as error:
+            self.denied = error
+            raise
+        raise AssertionError("the resolver handed out a control-plane secret")
+
+
+def test_the_secret_store_is_not_reachable_through_an_execution() -> None:
+    role = StoreProbeRole()
+    harness = build_harness(role=role)
+
+    record = deliver(harness)
+
+    assert role.public_store is None
+    assert isinstance(role.denied, SecretAccessDenied)
+    assert record.finalization is Finalization.FAILED
+    assert CONTROL_PLANE_SECRET_VALUE not in record.detail
+
+
+class SecretBearingExecutor:
+    """Fails with a domain error whose message carries a secret value."""
+
+    def start(self, request: ExecutionRequest) -> str:
+        return "secret-bearing"
+
+    def poll(self, execution_id: str) -> ExecutionState:
+        raise ExecutionFailed(f"the role leaked {EXECUTION_SECRET_VALUE}")
+
+    def result(self, execution_id: str) -> ExecutionOutput:
+        raise AssertionError("a failed execution has no result")
+
+    def stop(self, execution_id: str) -> None:
+        return None
+
+
+def test_a_boundary_error_message_cannot_carry_a_secret_into_state() -> None:
+    harness = build_harness(executor=SecretBearingExecutor())
+
+    record = deliver(harness)
+
+    assert record.finalization is Finalization.FAILED
+    assert record.detail == "ExecutionFailed"
+    assert EXECUTION_SECRET_VALUE not in record.detail

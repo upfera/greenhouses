@@ -7,10 +7,10 @@ import pytest
 from greenhouses.core.domain.errors import InvalidGrant, SecretAccessDenied
 from greenhouses.core.domain.secrets import (
     Capability,
-    GrantedSecrets,
     SecretRef,
     SecretScope,
     SecretValue,
+    granted_secrets,
     issue_grants,
 )
 from greenhouses.fakes.secrets import InMemorySecretStore
@@ -52,13 +52,13 @@ def test_issue_grants_rejects_an_unnamed_capability() -> None:
 
 def test_a_granted_capability_resolves_its_secret() -> None:
     grants = issue_grants("run-1", (Capability("summarize", secret="execution-secret"),))
-    access = GrantedSecrets(run_id="run-1", grants=grants, store=STORE)
+    access = granted_secrets(run_id="run-1", grants=grants, store=STORE)
 
     assert access.read("summarize").value == "execution-value"
 
 
 def test_an_ungranted_capability_is_denied() -> None:
-    access = GrantedSecrets(run_id="run-1", grants=(), store=STORE)
+    access = granted_secrets(run_id="run-1", grants=(), store=STORE)
 
     with pytest.raises(SecretAccessDenied):
         access.read("summarize")
@@ -66,14 +66,14 @@ def test_an_ungranted_capability_is_denied() -> None:
 
 def test_a_grant_from_another_run_does_not_unlock() -> None:
     grants = issue_grants("run-1", (Capability("summarize", secret="execution-secret"),))
-    access = GrantedSecrets(run_id="run-2", grants=grants, store=STORE)
+    access = granted_secrets(run_id="run-2", grants=grants, store=STORE)
 
     with pytest.raises(SecretAccessDenied):
         access.read("summarize")
 
 
 def test_a_control_plane_secret_is_unreachable_by_reference() -> None:
-    access = GrantedSecrets(run_id="run-1", grants=(), store=STORE)
+    access = granted_secrets(run_id="run-1", grants=(), store=STORE)
 
     with pytest.raises(SecretAccessDenied) as error:
         access.read_reference(CONTROL_PLANE)
@@ -83,13 +83,13 @@ def test_a_control_plane_secret_is_unreachable_by_reference() -> None:
 
 def test_a_granted_execution_reference_resolves() -> None:
     grants = issue_grants("run-1", (Capability("summarize", secret="execution-secret"),))
-    access = GrantedSecrets(run_id="run-1", grants=grants, store=STORE)
+    access = granted_secrets(run_id="run-1", grants=grants, store=STORE)
 
     assert access.read_reference(EXECUTION).value == "execution-value"
 
 
 def test_an_ungranted_reference_is_denied() -> None:
-    access = GrantedSecrets(run_id="run-1", grants=(), store=STORE)
+    access = granted_secrets(run_id="run-1", grants=(), store=STORE)
 
     with pytest.raises(SecretAccessDenied):
         access.read_reference(EXECUTION)

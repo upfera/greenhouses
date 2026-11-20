@@ -12,6 +12,7 @@ block releases the lease, so no run leaves a lease held.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import suppress
 from dataclasses import replace
 from datetime import timedelta
 from typing import Any, cast
@@ -44,7 +45,7 @@ from greenhouses.core.domain.lifecycle import (
     require_transition,
 )
 from greenhouses.core.domain.publication import Publication
-from greenhouses.core.domain.secrets import GrantedSecrets, issue_grants
+from greenhouses.core.domain.secrets import granted_secrets, issue_grants
 from greenhouses.core.domain.trigger import Trigger
 from greenhouses.core.ports.artifacts import ArtifactStore
 from greenhouses.core.ports.clock import Clock
@@ -124,14 +125,14 @@ class RunService:
             record, configuration = self._configure(record, definition)
             record, snapshot = self._prepare(record, trigger)
             record, lease = self._acquire(record, trigger, configuration)
-            record, request = self._grant(record, trigger, configuration, snapshot)
+            record, request = self._grant(record, trigger, definition, configuration, snapshot)
             record, output = self._execute(record, request)
             record, artifact = self._persist(record, trigger, output, snapshot)
             record = self._validate(record, trigger, artifact)
             record = self._publish(record, trigger, artifact, lease)
             return self._finalize(record, Finalization.PUBLISHED, "published")
         except GreenhousesError as error:
-            return self._finalize(record, _outcome_for(error), str(error))
+            return self._finalize(record, _outcome_for(error), type(error).__name__)
         except Exception as error:  # noqa: BLE001 - a trust boundary fails closed
             # An executor or port is a boundary: an unexpected error is a failed
             # run, not a crash. The message is omitted so nothing it carries,
@@ -185,6 +186,7 @@ class RunService:
         self,
         record: RunRecord,
         trigger: Trigger,
+        definition: AutomationDefinition,
         configuration: Configuration,
         snapshot: InputSnapshot,
     ) -> tuple[RunRecord, ExecutionRequest]:
@@ -194,8 +196,8 @@ class RunService:
             automation=trigger.automation,
             role=configuration.role,
             snapshot=snapshot,
-            secrets=GrantedSecrets(run_id=record.run_id, grants=grants, store=self._secrets),
-            parameters=dict(trigger.parameters),
+            secrets=granted_secrets(run_id=record.run_id, grants=grants, store=self._secrets),
+            parameters={**definition.parameters, **trigger.parameters},
         )
         return self._advance(record, RunState.GRANTED), request
 
@@ -208,14 +210,20 @@ class RunService:
 
     def _invoke(self, request: ExecutionRequest) -> ExecutionOutput:
         execution_id = self._executor.start(request)
-        for _ in range(_MAX_POLLS):
-            state = self._executor.poll(execution_id)
-            if state is ExecutionState.SUCCEEDED:
-                return self._executor.result(execution_id)
-            if state in {ExecutionState.FAILED, ExecutionState.STOPPED}:
-                raise ExecutionFailed(f"the executor ended in the {state.value!r} state")
-        self._executor.stop(execution_id)
-        raise ExecutionFailed("the executor did not finish within the poll budget")
+        try:
+            for _ in range(_MAX_POLLS):
+                state = self._executor.poll(execution_id)
+                if state is ExecutionState.SUCCEEDED:
+                    return self._executor.result(execution_id)
+                if state in {ExecutionState.FAILED, ExecutionState.STOPPED}:
+                    raise ExecutionFailed(f"the executor ended in the {state.value!r} state")
+            raise ExecutionFailed("the executor did not finish within the poll budget")
+        except BaseException:
+            # The execution may still be running, so stop it best effort and re-raise:
+            # the original failure is the one the run records.
+            with suppress(Exception):
+                self._executor.stop(execution_id)
+            raise
 
     # 8. Validate and persist a versioned, serializable result artifact.
     def _persist(

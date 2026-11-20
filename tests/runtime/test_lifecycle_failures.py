@@ -21,6 +21,8 @@ from support import (
     moved_item,
 )
 
+from greenhouses.core.domain.errors import ExecutionFailed
+from greenhouses.core.domain.execution import ExecutionOutput, ExecutionRequest, ExecutionState
 from greenhouses.core.domain.identity import AutomationId
 from greenhouses.core.domain.lifecycle import Finalization, RunRecord, RunState
 from greenhouses.core.domain.secrets import Capability, SecretScope
@@ -173,3 +175,32 @@ def test_a_lease_that_expires_during_the_run_cannot_publish() -> None:
     _assert_finalized(record, Finalization.LEASE_LOST)
     assert harness.provider.publications == []
     _assert_lease_released(harness)
+
+
+class FailingPollExecutor:
+    """Raises while polling, after the execution has started."""
+
+    def __init__(self) -> None:
+        self.stopped: list[str] = []
+
+    def start(self, request: ExecutionRequest) -> str:
+        return "failing-poll"
+
+    def poll(self, execution_id: str) -> ExecutionState:
+        raise ExecutionFailed("polling failed")
+
+    def result(self, execution_id: str) -> ExecutionOutput:
+        raise AssertionError("a failed execution has no result")
+
+    def stop(self, execution_id: str) -> None:
+        self.stopped.append(execution_id)
+
+
+def test_an_execution_is_stopped_when_polling_fails() -> None:
+    executor = FailingPollExecutor()
+    harness = build_harness(executor=executor)
+
+    record = deliver(harness)
+
+    assert record.finalization is Finalization.FAILED
+    assert executor.stopped == ["failing-poll"]

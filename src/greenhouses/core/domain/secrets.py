@@ -14,7 +14,7 @@ store itself is never handed to an executor: an executor receives
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -112,7 +112,7 @@ class GrantedSecrets:
 
     run_id: str
     grants: tuple[CapabilityGrant, ...]
-    store: SecretStore
+    _resolve: Callable[[SecretRef], SecretValue]
 
     def read(self, capability: str) -> SecretValue:
         """Resolve the secret a granted capability unlocks."""
@@ -122,7 +122,7 @@ class GrantedSecrets:
                 and grant.run_id == self.run_id
                 and grant.secret.scope is SecretScope.EXECUTION
             ):
-                return self.store.resolve(grant.secret)
+                return self._resolve(grant.secret)
         raise SecretAccessDenied(f"no run-scoped grant for capability {capability!r}")
 
     def read_reference(self, reference: SecretRef) -> SecretValue:
@@ -133,5 +133,25 @@ class GrantedSecrets:
             )
         for grant in self.grants:
             if grant.secret == reference and grant.run_id == self.run_id:
-                return self.store.resolve(reference)
+                return self._resolve(reference)
         raise SecretAccessDenied(f"no run-scoped grant for secret {reference.name!r}")
+
+
+def granted_secrets(
+    run_id: str, grants: tuple[CapabilityGrant, ...], store: SecretStore
+) -> GrantedSecrets:
+    """Build the execution-facing secret access for one run.
+
+    The store stays inside the resolver, which refuses every reference this run's grants do
+    not name, so it is not reachable through the object an execution is given.
+    """
+    allowed = {grant.secret for grant in grants}
+
+    def resolve(reference: SecretRef) -> SecretValue:
+        if reference.scope is not SecretScope.EXECUTION or reference not in allowed:
+            raise SecretAccessDenied(
+                f"{reference.scope.value} secrets are not available to an execution"
+            )
+        return store.resolve(reference)
+
+    return GrantedSecrets(run_id=run_id, grants=grants, _resolve=resolve)

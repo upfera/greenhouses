@@ -9,6 +9,7 @@ JSON-compatible values and core identities. Its identity is derived through
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -25,6 +26,9 @@ type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, J
 
 def _canonical(value: object) -> JsonValue:
     """Return ``value`` as plain JSON-compatible data, or fail closed."""
+    if isinstance(value, float) and not math.isfinite(value):
+        # Non-finite floats are not JSON: they serialize as bare NaN/Infinity tokens.
+        raise InvalidResult(f"an artifact payload may not contain {value!r}")
     if value is None or isinstance(value, bool | int | float | str):
         return value
     if isinstance(value, Mapping):
@@ -58,6 +62,7 @@ class Artifact:
             ensure_ascii=False,
             sort_keys=True,
             separators=(",", ":"),
+            allow_nan=False,
         )
         return compute_revision(self.version, "artifact", (self.automation.name,), canonical)
 

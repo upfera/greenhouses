@@ -113,3 +113,11 @@ def test_the_serialized_artifact_is_vendor_neutral() -> None:
     serialized = _artifact().to_json().lower()
     for marker in VENDOR_MARKERS:
         assert marker not in serialized
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), float("-inf")])
+def test_a_non_finite_number_is_rejected(value: float) -> None:
+    artifact = _artifact(payload={"number": value})
+
+    with pytest.raises(InvalidResult):
+        artifact.validated()

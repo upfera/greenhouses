@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
-import pytest
-from support import AUTOMATION, ITEM_ID, build_harness, default_item, deliver
+from collections.abc import Mapping
 
+import pytest
+from support import AUTOMATION, ITEM_ID, build_harness, default_definition, default_item, deliver
+
+from greenhouses.core.domain.artifact import JsonValue
 from greenhouses.core.domain.errors import WorkItemNotFound
+from greenhouses.core.domain.execution import ExecutionRequest
 from greenhouses.core.domain.lifecycle import Finalization, RunState
 from greenhouses.core.domain.trigger import TriggerSource
 from greenhouses.runtime.dispatch import DeliveredEvent
@@ -89,3 +93,27 @@ def test_a_scheduled_scan_of_a_missing_item_cannot_form_a_trigger() -> None:
         harness.dispatcher.scan(AUTOMATION, "absent-item", sequence=1)
 
     assert harness.provider.publications == []
+
+
+class ParameterRecordingRole:
+    """Records the parameters the execution was given."""
+
+    name = "parameter-recording"
+
+    def __init__(self) -> None:
+        self.parameters: Mapping[str, str] = {}
+
+    def produce(self, request: ExecutionRequest) -> Mapping[str, JsonValue]:
+        self.parameters = dict(request.parameters)
+        return {"summary": "ok"}
+
+
+def test_definition_parameters_reach_the_execution() -> None:
+    role = ParameterRecordingRole()
+    harness = build_harness(
+        role=role, definition=default_definition(parameters={"from_definition": "yes"})
+    )
+
+    deliver(harness)
+
+    assert role.parameters == {"from_definition": "yes"}

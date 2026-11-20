@@ -20,7 +20,7 @@ from greenhouses.core.domain.execution import (
     InputSnapshot,
 )
 from greenhouses.core.domain.identity import AutomationId
-from greenhouses.core.domain.secrets import GrantedSecrets, SecretRef
+from greenhouses.core.domain.secrets import SecretRef, granted_secrets
 from greenhouses.core.domain.work_item import Revision
 from greenhouses.core.ports.executor import Executor
 from greenhouses.core.ports.roles import Role
@@ -57,7 +57,7 @@ def contract_request() -> ExecutionRequest:
             revision=Revision("revision"),
             fields={"title": "Contract"},
         ),
-        secrets=GrantedSecrets(run_id="run-1", grants=(), store=_NoSecrets()),
+        secrets=granted_secrets(run_id="run-1", grants=(), store=_NoSecrets()),
     )
 
 
