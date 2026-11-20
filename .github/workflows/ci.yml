@@ -15,11 +15,11 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-      # Job-scoped, on top of the workflow-level `contents: read`:
-      #   pull-requests: write - comment the run summary on the pull request
-      permissions:
-        contents: read
-        pull-requests: write
+    # Job-scoped, on top of the workflow-level `contents: read`:
+    #   pull-requests: write - comment the run summary on the pull request
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
