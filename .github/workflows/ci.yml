@@ -15,8 +15,11 @@ permissions:
 jobs:
   checks:
     runs-on: ubuntu-latest
-    # No job-scoped permissions: the workflow-level `contents: read` covers the checkout,
-    # the test run and the artifact upload. Nothing publishes a check run.
+      # Job-scoped, on top of the workflow-level `contents: read`:
+      #   pull-requests: write - comment the run summary on the pull request
+      permissions:
+        contents: read
+        pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,8 +92,20 @@ jobs:
                   out += ["", "</details>"]
           if Path("reports/coverage.md").exists():
               out += ["", "### \U0001f4ca Coverage", Path("reports/coverage.md").read_text(encoding="utf-8").strip()]
-          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text("\n".join(out) + "\n", encoding="utf-8")
+          body = "\n".join(out) + "\n"
+          Path("reports/test-summary.md").write_text(body, encoding="utf-8")
+          Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(body, encoding="utf-8")
           PY
+      - name: Comment the summary on the pull request
+        # A pull request from a fork gets a read-only token, so it is skipped there.
+        if: ${{ !cancelled() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          number="${{ github.event.pull_request.number }}"
+          # Edit our previous comment when there is one, so pushes do not pile up.
+          gh pr comment "$number" --edit-last --body-file reports/test-summary.md \
+            || gh pr comment "$number" --body-file reports/test-summary.md
       - name: Upload test and coverage reports
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
