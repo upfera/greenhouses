@@ -67,11 +67,10 @@ def main(argv: list[str] | None = None) -> int:
     """Run the CLI and return its exit status without terminating the caller."""
     args = sys.argv[1:] if argv is None else list(argv)
     parser = _build_parser()
-    if not args:
-        parser.print_help()
-        return 0
     try:
         parser.parse_args(args)
     except _ParserExit as exc:
         return exc.status
+    if not args:
+        parser.print_help()
     return 0
