@@ -40,9 +40,10 @@ class InMemoryExecutor:
     def start(self, request: ExecutionRequest) -> str:
         self._counter += 1
         execution_id = f"execution-{self._counter}"
+        # A boundary reports failure rather than crashing the run.
         try:
             payload = self._role.produce(request)
-        except Exception as error:  # noqa: BLE001 - a boundary reports failure, not a crash
+        except Exception as error:  # noqa: BLE001
             self._executions[execution_id] = _Execution(
                 state=ExecutionState.FAILED,
                 detail=f"the role failed with {type(error).__name__}",

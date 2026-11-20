@@ -280,13 +280,13 @@ class RunService:
 
     def _advance(self, record: RunRecord, state: RunState) -> RunRecord:
         require_transition(record.state, state)
-        advanced = replace(record, state=state, history=(*record.history, state))
+        advanced: RunRecord = replace(record, state=state, history=(*record.history, state))
         self._runs.put(advanced)
         return advanced
 
     def _finalize(self, record: RunRecord, finalization: Finalization, detail: str) -> RunRecord:
         require_transition(record.state, RunState.FINALIZED)
-        finalized = replace(
+        finalized: RunRecord = replace(
             record,
             state=RunState.FINALIZED,
             finalization=finalization,

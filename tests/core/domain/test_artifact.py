@@ -51,8 +51,10 @@ def test_identity_is_derived_without_new_hashing() -> None:
 
 
 def test_an_unknown_version_is_rejected_by_validation() -> None:
+    artifact = _artifact(version="99")
+
     with pytest.raises(UnknownArtifactVersion):
-        _artifact(version="99").validated()
+        artifact.validated()
 
 
 def test_an_unknown_version_is_rejected_on_load() -> None:
@@ -94,13 +96,17 @@ def test_from_dict_rejects_an_incomplete_shape(data: dict[str, Any]) -> None:
 
 
 def test_a_non_serializable_payload_is_rejected() -> None:
+    artifact = _artifact(payload={"bad": object()})
+
     with pytest.raises(InvalidResult):
-        _artifact(payload={"bad": object()}).validated()
+        artifact.validated()
 
 
 def test_a_missing_item_id_is_rejected() -> None:
+    artifact = _artifact(item_id="")
+
     with pytest.raises(InvalidResult):
-        _artifact(item_id="").validated()
+        artifact.validated()
 
 
 def test_the_serialized_artifact_is_vendor_neutral() -> None:

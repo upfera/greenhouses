@@ -6,7 +6,6 @@ tests rather than of the machine they run on.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -17,10 +16,9 @@ def _blocked(*args: Any, **kwargs: Any) -> Any:
 
 
 @pytest.fixture(autouse=True)
-def _no_network(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def _no_network(monkeypatch: pytest.MonkeyPatch) -> None:
     import socket
 
     for name in ("socket", "create_connection", "socketpair", "getaddrinfo"):
         if hasattr(socket, name):
             monkeypatch.setattr(socket, name, _blocked)
-    yield

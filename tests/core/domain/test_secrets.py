@@ -44,8 +44,10 @@ def test_issue_grants_rejects_an_unsupported_scope() -> None:
 
 
 def test_issue_grants_rejects_an_unnamed_capability() -> None:
+    capability = Capability("")
+
     with pytest.raises(InvalidGrant):
-        issue_grants("run-1", (Capability(""),))
+        issue_grants("run-1", (capability,))
 
 
 def test_a_granted_capability_resolves_its_secret() -> None:

@@ -57,9 +57,13 @@ class ProviderContract:
         assert receipt.artifact_id == "artifact-1"
 
     def test_publish_rejects_a_stale_revision(self, provider: WorkItemProvider) -> None:
+        publication = _publication(Revision("not-the-current-revision"))
+
         with pytest.raises(StaleWorkItem):
-            provider.publish(_publication(Revision("not-the-current-revision")))
+            provider.publish(publication)
 
     def test_publish_rejects_an_absent_item(self, provider: WorkItemProvider) -> None:
+        publication = _publication(CONTRACT_ITEM.revision, item_id="absent-item")
+
         with pytest.raises(StaleWorkItem):
-            provider.publish(_publication(CONTRACT_ITEM.revision, item_id="absent-item"))
+            provider.publish(publication)

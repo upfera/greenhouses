@@ -17,5 +17,8 @@ def test_an_empty_name_is_rejected() -> None:
 
 
 def test_equal_names_compare_equal() -> None:
-    assert AutomationId("demo") == AutomationId("demo")
-    assert AutomationId("demo") != AutomationId("other")
+    first = AutomationId("demo")
+    second = AutomationId("demo")
+
+    assert first == second
+    assert first != AutomationId("other")

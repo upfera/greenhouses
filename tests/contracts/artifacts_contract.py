@@ -43,5 +43,7 @@ class ArtifactStoreContract:
         assert store.load("absent-artifact") is None
 
     def test_an_unknown_version_fails_closed(self, store: ArtifactStore) -> None:
+        artifact = contract_artifact(version="99")
+
         with pytest.raises(UnknownArtifactVersion):
-            store.save(contract_artifact(version="99"))
+            store.save(artifact)

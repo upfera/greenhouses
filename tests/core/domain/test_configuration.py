@@ -30,19 +30,26 @@ def test_a_well_formed_configuration_validates() -> None:
 
 
 def test_an_unsupported_version_fails_closed() -> None:
+    configuration = _configuration(version="99")
+
     with pytest.raises(InvalidConfiguration):
-        _configuration(version="99").validated()
+        configuration.validated()
 
 
 def test_a_configuration_without_a_role_fails_closed() -> None:
+    configuration = _configuration(role="")
+
     with pytest.raises(InvalidConfiguration):
-        _configuration(role="").validated()
+        configuration.validated()
 
 
 @pytest.mark.parametrize("ttl", [0, -1])
 def test_a_non_positive_lease_duration_fails_closed(ttl: int) -> None:
+    policy = ExecutionPolicy(lease_ttl_seconds=ttl)
+    configuration = _configuration(policy=policy)
+
     with pytest.raises(InvalidConfiguration):
-        _configuration(policy=ExecutionPolicy(lease_ttl_seconds=ttl)).validated()
+        configuration.validated()
 
 
 def test_a_policy_carries_its_capabilities() -> None:
