@@ -67,3 +67,20 @@ hashing at all. No new hashing code is introduced.
   distributed transaction: the recorded record is the de-duplication.
 - The fence makes takeover safe: an old holder's lease can never be mistaken for the current one.
 - A test harness advances a `ManualClock` to exercise expiry and takeover deterministically.
+
+## Concurrency model
+
+The service assumes one dispatcher per work item, single-threaded, and is written to be
+correct under that assumption:
+
+- Starting a run is one atomic store operation, `RunStateStore.begin`, which returns the
+  stored record and whether this call created it. Two concurrent deliveries of one trigger
+  cannot both start a run: the loser receives the winner's record, the same outcome the
+  sequential path returns.
+- Lease acquisition is a single store operation with a monotonic fence per work item.
+- The fence the run holds travels with the publication request, so a provider that can
+  verify it rejects a publication from a superseded holder as part of the effect itself,
+  not after it. The in-memory provider records the fence; an out-of-process provider checks
+  it.
+- A store shared across processes must provide the same atomicity for `begin` and
+  `acquire`. That is the contract, not an implementation detail.

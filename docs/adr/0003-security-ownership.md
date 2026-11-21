@@ -22,7 +22,10 @@ same abstraction:
   `GrantedSecrets`, never the store itself, to an execution.
 - `GrantedSecrets` refuses every scope but `execution` (`read_reference` denies a control-plane
   reference outright) and only resolves what a grant allows. A control-plane secret is therefore
-  unreachable from an execution by construction, not by policy. The in-memory store happens to
+  unreachable from an execution through this object: the store is not a field and not
+  a closure over one. Isolation from other code in the same interpreter is not something
+  an object can provide, so the boundary that holds is the executor's process isolation
+  (RFC section 6); the in-process fakes simulate that boundary, they do not replace it.
   hold both kinds, which is exactly why the executor must not receive it.
 
 ### Grants are declared and run-scoped

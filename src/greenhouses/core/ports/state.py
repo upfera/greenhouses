@@ -33,6 +33,14 @@ class RunStateStore(Protocol):
         """Return the record for a trigger's idempotency key."""
         ...
 
+    def begin(self, record: RunRecord) -> tuple[RunRecord, bool]:
+        """Store the record unless its idempotency key is taken, atomically.
+
+        Returns the stored record and whether this call created it, so two concurrent
+        deliveries of one trigger cannot both start a run.
+        """
+        ...
+
     def put(self, record: RunRecord) -> None:
         """Persist a run record."""
         ...

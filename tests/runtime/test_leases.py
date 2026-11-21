@@ -117,3 +117,12 @@ def test_two_items_do_not_block_each_other() -> None:
     assert first.finalization is Finalization.PUBLISHED
     assert second.finalization is Finalization.PUBLISHED
     assert len(harness.provider.publications) == 2
+
+
+def test_the_publication_carries_the_lease_fence() -> None:
+    harness = build_harness()
+
+    record = deliver(harness)
+
+    assert record.finalization is Finalization.PUBLISHED
+    assert [publication.fence for publication in harness.provider.publications] == [1]

@@ -23,6 +23,7 @@ from greenhouses.core.domain.artifact import Artifact, JsonValue
 from greenhouses.core.domain.errors import ExecutionFailed, SecretAccessDenied
 from greenhouses.core.domain.execution import ExecutionOutput, ExecutionRequest, ExecutionState
 from greenhouses.core.domain.lifecycle import Finalization
+from greenhouses.core.domain.secrets import SecretScope
 from greenhouses.core.ports.roles import Role
 from greenhouses.core.ports.secrets import SecretStore
 from greenhouses.roles.synthetic import SyntheticRole
@@ -145,23 +146,31 @@ def test_state_is_not_a_secret_store() -> None:
 
 
 class StoreProbeRole:
-    """Tries to reach the store and the resolver behind the execution-facing object."""
+    """Tries to reach the secret store through everything the execution object exposes."""
 
     name = "store-probe"
 
     def __init__(self) -> None:
-        self.public_store: object = "unset"
+        self.reachable: list[str] = []
+        self.control_plane_values: list[str] = []
         self.denied: SecretAccessDenied | None = None
 
     def produce(self, request: ExecutionRequest) -> Mapping[str, JsonValue]:
-        self.public_store = getattr(request.secrets, "store", None)
-        resolver = request.secrets._resolve
+        access = request.secrets
+        for name in dir(access):
+            value = getattr(access, name)
+            if type(value).__name__.endswith("SecretStore"):
+                self.reachable.append(name)
+        values = getattr(access, "_values", {})
+        self.control_plane_values = [
+            str(key) for key in values if key.scope is not SecretScope.EXECUTION
+        ]
         try:
-            resolver(CONTROL_PLANE_SECRET)
+            access.read_reference(CONTROL_PLANE_SECRET)
         except SecretAccessDenied as error:
             self.denied = error
             raise
-        raise AssertionError("the resolver handed out a control-plane secret")
+        raise AssertionError("a control-plane secret was readable from an execution")
 
 
 def test_the_secret_store_is_not_reachable_through_an_execution() -> None:
@@ -170,7 +179,8 @@ def test_the_secret_store_is_not_reachable_through_an_execution() -> None:
 
     record = deliver(harness)
 
-    assert role.public_store is None
+    assert role.reachable == []
+    assert role.control_plane_values == []
     assert isinstance(role.denied, SecretAccessDenied)
     assert record.finalization is Finalization.FAILED
     assert CONTROL_PLANE_SECRET_VALUE not in record.detail

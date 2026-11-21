@@ -112,13 +112,16 @@ class RunService:
             return recorded
         if trigger.sequence <= self._runs.last_sequence(trigger.item_id):
             superseded = self._finalize(
-                self._begin(trigger),
+                self._begin(trigger)[0],
                 Finalization.SUPERSEDED,
                 "an older trigger arrived after a newer one completed",
             )
             return superseded
 
-        record = self._begin(trigger)
+        record, created = self._begin(trigger)
+        if not created:
+            # Another delivery won the race: return its record.
+            return record
         lease: Lease | None = None
         try:
             record, definition = self._resolve(record, trigger)
@@ -267,12 +270,13 @@ class RunService:
                 expected_revision=artifact.revision,
                 artifact_id=artifact.artifact_id,
                 summary=_summary(artifact.payload),
+                fence=lease.fence,
             )
         )
         return self._advance(record, RunState.PUBLISHED)
 
     # The record-keeping helpers.
-    def _begin(self, trigger: Trigger) -> RunRecord:
+    def _begin(self, trigger: Trigger) -> tuple[RunRecord, bool]:
         record = RunRecord(
             run_id=trigger.trigger_id,
             trigger_id=trigger.trigger_id,
@@ -284,8 +288,8 @@ class RunService:
             detail="received",
             history=(RunState.RECEIVED,),
         )
-        self._runs.put(record)
-        return record
+        stored, created = self._runs.begin(record)
+        return stored, created
 
     def _advance(self, record: RunRecord, state: RunState) -> RunRecord:
         require_transition(record.state, state)

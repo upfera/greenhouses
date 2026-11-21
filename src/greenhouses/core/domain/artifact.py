@@ -24,6 +24,17 @@ SUPPORTED_ARTIFACT_VERSIONS = frozenset({ARTIFACT_VERSION})
 type JsonValue = None | bool | int | float | str | list[JsonValue] | dict[str, JsonValue]
 
 
+def _canonical_key(key: object) -> str:
+    """Return the key as a string, or fail closed.
+
+    Coercing silently would let ``{1: "a", "1": "b"}`` collapse into one key, changing the
+    artifact's identity without anyone noticing.
+    """
+    if not isinstance(key, str):
+        raise InvalidResult(f"an artifact payload may not use the {type(key).__name__} key {key!r}")
+    return key
+
+
 def _canonical(value: object) -> JsonValue:
     """Return ``value`` as plain JSON-compatible data, or fail closed."""
     if isinstance(value, float) and not math.isfinite(value):
@@ -32,7 +43,7 @@ def _canonical(value: object) -> JsonValue:
     if value is None or isinstance(value, bool | int | float | str):
         return value
     if isinstance(value, Mapping):
-        return {str(key): _canonical(item) for key, item in value.items()}
+        return {_canonical_key(key): _canonical(item) for key, item in value.items()}
     if isinstance(value, list | tuple):
         return [_canonical(item) for item in value]
     raise InvalidResult(f"an artifact payload may not contain {type(value).__name__}")
@@ -47,6 +58,12 @@ class Artifact:
     item_id: str
     revision: Revision
     payload: Mapping[str, JsonValue]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.payload, Mapping):
+            raise InvalidResult(
+                f"an artifact payload must be an object, not {type(self.payload).__name__}"
+            )
 
     @property
     def artifact_id(self) -> str:

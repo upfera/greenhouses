@@ -121,3 +121,18 @@ def test_a_non_finite_number_is_rejected(value: float) -> None:
 
     with pytest.raises(InvalidResult):
         artifact.validated()
+
+
+def test_a_non_object_payload_is_rejected() -> None:
+    with pytest.raises(InvalidResult):
+        _artifact(payload=[1, 2])  # type: ignore[arg-type]
+
+
+def test_a_non_string_key_is_rejected() -> None:
+    with pytest.raises(InvalidResult):
+        _artifact(payload={1: "a"}).validated()  # type: ignore[dict-item]
+
+
+def test_a_rejected_payload_cannot_collide_with_a_string_key() -> None:
+    with pytest.raises(InvalidResult):
+        _artifact(payload={1: "a", "1": "b"}).validated()  # type: ignore[dict-item]

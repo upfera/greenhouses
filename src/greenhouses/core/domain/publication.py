@@ -23,6 +23,7 @@ class Publication:
     expected_revision: Revision
     artifact_id: str
     summary: str
+    fence: int
 
 
 @dataclass(frozen=True, slots=True)

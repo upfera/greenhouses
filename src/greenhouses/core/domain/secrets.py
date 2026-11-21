@@ -14,7 +14,7 @@ store itself is never handed to an executor: an executor receives
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import TYPE_CHECKING
@@ -112,7 +112,7 @@ class GrantedSecrets:
 
     run_id: str
     grants: tuple[CapabilityGrant, ...]
-    _resolve: Callable[[SecretRef], SecretValue]
+    _values: Mapping[SecretRef, SecretValue]
 
     def read(self, capability: str) -> SecretValue:
         """Resolve the secret a granted capability unlocks."""
@@ -122,7 +122,7 @@ class GrantedSecrets:
                 and grant.run_id == self.run_id
                 and grant.secret.scope is SecretScope.EXECUTION
             ):
-                return self._resolve(grant.secret)
+                return self._values[grant.secret]
         raise SecretAccessDenied(f"no run-scoped grant for capability {capability!r}")
 
     def read_reference(self, reference: SecretRef) -> SecretValue:
@@ -133,7 +133,7 @@ class GrantedSecrets:
             )
         for grant in self.grants:
             if grant.secret == reference and grant.run_id == self.run_id:
-                return self._resolve(reference)
+                return self._values[reference]
         raise SecretAccessDenied(f"no run-scoped grant for secret {reference.name!r}")
 
 
@@ -142,16 +142,13 @@ def granted_secrets(
 ) -> GrantedSecrets:
     """Build the execution-facing secret access for one run.
 
-    The store stays inside the resolver, which refuses every reference this run's grants do
-    not name, so it is not reachable through the object an execution is given.
+    Every granted reference is resolved here, once, and only the values are handed over.
+    The returned object holds no store and no closure over one, so the store cannot be
+    reached from an execution even by introspecting it. Isolation from other code in the
+    same process is the executor's concern, not this object's; see ADR 0003.
     """
-    allowed = {grant.secret for grant in grants}
-
-    def resolve(reference: SecretRef) -> SecretValue:
-        if reference.scope is not SecretScope.EXECUTION or reference not in allowed:
-            raise SecretAccessDenied(
-                f"{reference.scope.value} secrets are not available to an execution"
-            )
-        return store.resolve(reference)
-
-    return GrantedSecrets(run_id=run_id, grants=grants, _resolve=resolve)
+    return GrantedSecrets(
+        run_id=run_id,
+        grants=grants,
+        _values={grant.secret: store.resolve(grant.secret) for grant in grants},
+    )

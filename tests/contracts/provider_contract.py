@@ -25,6 +25,7 @@ CONTRACT_ITEM = WorkItem(
 
 def _publication(expected_revision: Revision, item_id: str = CONTRACT_ITEM.item_id) -> Publication:
     return Publication(
+        fence=1,
         automation=AutomationId("contract"),
         item_id=item_id,
         expected_revision=expected_revision,

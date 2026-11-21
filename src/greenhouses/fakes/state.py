@@ -18,6 +18,10 @@ class InMemoryRunStateStore:
     def get(self, trigger_id: str) -> RunRecord | None:
         return self._records.get(trigger_id)
 
+    def begin(self, record: RunRecord) -> tuple[RunRecord, bool]:
+        existing = self._records.setdefault(record.trigger_id, record)
+        return existing, existing is record
+
     def put(self, record: RunRecord) -> None:
         self._records[record.trigger_id] = record
         if record.state is RunState.FINALIZED:
